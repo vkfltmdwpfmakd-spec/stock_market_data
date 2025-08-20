@@ -25,6 +25,16 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # 성능 및 모니터링 설정 추가
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: 3
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - data_pipeline_network
 
@@ -54,6 +64,12 @@ services:
     ports:
       - "9870:9870"
       - "8020:8020"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - data_pipeline_network
 
@@ -90,11 +106,24 @@ services:
     restart: always
     environment:
       - SPARK_MODE=master
+      # 성능 최적화 설정
+      - SPARK_DRIVER_MEMORY=2g
+      - SPARK_EXECUTOR_MEMORY=2g
+      - SPARK_EXECUTOR_CORES=2
+      - SPARK_DRIVER_MAX_RESULT_SIZE=1g
+      - SPARK_CONF_spark_sql_adaptive_enabled=true
+      - SPARK_CONF_spark_sql_adaptive_coalescePartitions_enabled=true
     volumes:
       - ./scripts:/opt/bitnami/spark/scripts
     ports:
       - "8080:8080"
       - "7077:7077"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - data_pipeline_network
 
@@ -121,7 +150,7 @@ services:
     volumes:
       - airflow_data:/opt/airflow
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username admin --password admin --role Admin --email admin@example.com --firstname default --lastname user || true"
+    command: -c "airflow db migrate && airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --role Admin --email admin@example.com --firstname default --lastname user || true"
     restart: "no"
 
   # Airflow 웹서버 서비스
@@ -142,7 +171,7 @@ services:
       - ./plugins:/opt/airflow/plugins
       - ./scripts:/opt/airflow/scripts # DAG에서 producer.py를 실행하기 위해 추가
       - airflow_data:/opt/airflow
-      - /var/run/docker.sock:/var/run/docker.sock # docker exec 사용을 위해 필요
+      - /var/run/docker.sock:/var/run/docker.sock:ro # docker exec 사용을 위해 필요 (읽기 전용)
     ports:
       - "8082:8080"
     command: airflow webserver
@@ -167,7 +196,7 @@ services:
       - ./plugins:/opt/airflow/plugins
       - ./scripts:/opt/airflow/scripts
       - airflow_data:/opt/airflow
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: airflow scheduler
     networks:
       - data_pipeline_network
@@ -178,13 +207,20 @@ services:
     networks:
       - data_pipeline_network
     restart: always
+    environment:
+      - JAVA_HOME=/usr/lib/jvm/default-java
+      - PYSPARK_PYTHON=python3
     volumes:
       - ./dashboard.py:/app/dashboard.py
       - ./requirements-dashboard.txt:/app/requirements.txt
     ports:
       - "8503:8501"
     working_dir: /app
-    command: bash -c "pip install -r requirements.txt && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
+    command: bash -c "
+      apt-get update && 
+      apt-get install -y default-jdk procps &&
+      pip install -r requirements.txt && 
+      streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
     depends_on:
       - namenode
 

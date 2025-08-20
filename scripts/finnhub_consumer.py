@@ -16,15 +16,41 @@ KAFKA_TOPIC = "finnhub_stock_data"
 HDFS_PATH = "hdfs://namenode:8020/user/spark/finnhub_market_data"
 
 json_schema = StructType([
+    # 기본 필드들
     StructField("symbol", StringType(), True),
-    StructField("open", DoubleType(), True),
-    StructField("high", DoubleType(), True),
-    StructField("low", DoubleType(), True),
-    StructField("price", DoubleType(), True),
+    StructField("current_price", DoubleType(), True),
+    StructField("open_price", DoubleType(), True),
+    StructField("high_price", DoubleType(), True),
+    StructField("low_price", DoubleType(), True),
     StructField("previous_close", DoubleType(), True),
-    StructField("change", DoubleType(), True),
-    StructField("change_percent", DoubleType(), True),
-    StructField("timestamp", StringType(), True)
+    StructField("price_change", DoubleType(), True),
+    StructField("percent_change", DoubleType(), True),
+    StructField("timestamp", StringType(), True),
+    
+    # 확장 필드들 (선택적)
+    StructField("company_name", StringType(), True),
+    StructField("industry", StringType(), True),
+    StructField("market_cap", DoubleType(), True),
+    StructField("country", StringType(), True),
+    StructField("currency", StringType(), True),
+    StructField("exchange", StringType(), True),
+    StructField("ipo_date", StringType(), True),
+    
+    # 재무 지표들 (선택적)
+    StructField("pe_ratio", DoubleType(), True),
+    StructField("pb_ratio", DoubleType(), True),
+    StructField("eps_ttm", DoubleType(), True),
+    StructField("dividend_yield", DoubleType(), True),
+    StructField("beta", DoubleType(), True),
+    StructField("week_52_high", DoubleType(), True),
+    StructField("week_52_low", DoubleType(), True),
+    StructField("volume_10day_avg", DoubleType(), True),
+    
+    # 계산된 지표들
+    StructField("daily_return", DoubleType(), True),
+    StructField("volatility", DoubleType(), True),
+    StructField("price_range", DoubleType(), True),
+    StructField("price_position", DoubleType(), True)
 ])
 
 def create_spark_session():

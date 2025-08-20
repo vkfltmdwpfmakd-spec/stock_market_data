@@ -1,9 +1,13 @@
 # finnhub_batch_analyzer.py
 
 import sys
+import logging
 from pyspark.sql import SparkSession
-from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import col, avg, to_date
+from pyspark.sql.window import Window
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 APP_NAME = "FinnhubBatchAnalyzer"
 HDFS_INPUT_PATH = "hdfs://namenode:8020/user/spark/finnhub_market_data"
@@ -15,21 +19,27 @@ def create_spark_session():
         .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
         .config("spark.sql.parquet.writeLegacyFormat", "true") \
         .config("spark.hadoop.dfs.client.use.datanode.hostname", "true") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+        .config("spark.sql.adaptive.skewJoin.enabled", "true") \
+        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
+        .config("spark.sql.parquet.compression.codec", "snappy") \
         .getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
-    print("[Finnhub] SparkSession이 성공적으로 생성되었습니다.")
+    logging.info("[Finnhub] SparkSession이 성공적으로 생성되었습니다.")
     return spark
 
 def analyze_stock_data(spark):
-    print(f"[Finnhub] HDFS 경로 '{HDFS_INPUT_PATH}'에서 데이터를 읽어옵니다...")
+    logging.info(f"[Finnhub] HDFS 경로 '{HDFS_INPUT_PATH}'에서 데이터를 읽어옵니다...")
 
     try:
         df = spark.read.parquet(HDFS_INPUT_PATH)
-        print(f"[Finnhub] 총 {df.count()}개의 레코드를 읽었습니다.")
+        record_count = df.count()
+        logging.info(f"[Finnhub] 총 {record_count}개의 레코드를 읽었습니다.")
 
         # 데이터가 비어있으면 분석 중단
         if df.rdd.isEmpty():
-            print("[Finnhub] 경고: 입력 데이터가 비어있어 분석을 건너뜁니다.")
+            logging.warning("[Finnhub] 경고: 입력 데이터가 비어있어 분석을 건너뜁니다.")
             return
 
         # 1. 데이터를 날짜별로 집계하여 일별 평균 가격 계산
@@ -37,7 +47,11 @@ def analyze_stock_data(spark):
             df.withColumn("trade_date", to_date(col("timestamp")))
             .groupBy("symbol", "trade_date")
             .agg(
-                avg("price").alias("average_price")
+                avg("current_price").alias("average_price"),
+                avg("market_cap").alias("avg_market_cap"),
+                avg("pe_ratio").alias("avg_pe_ratio"),
+                avg("volatility").alias("avg_volatility"),
+                avg("daily_return").alias("avg_daily_return")
             )
         )
 
@@ -55,7 +69,7 @@ def analyze_stock_data(spark):
                         .orderBy(col("trade_date").desc(), col("symbol"))
         )
 
-        print("[Finnhub] 분석 결과 (7일 이동평균 포함):")
+        logging.info("[Finnhub] 분석 결과 (7일 이동평균 포함):")
         analyzed_df.show(truncate=False)
 
         analyzed_df.write \
@@ -63,12 +77,12 @@ def analyze_stock_data(spark):
             .partitionBy("trade_date") \
             .parquet(HDFS_OUTPUT_PATH)
 
-        print(f"[Finnhub] 분석 결과가 HDFS 경로 '{HDFS_OUTPUT_PATH}'에 성공적으로 저장되었습니다.")
+        logging.info(f"[Finnhub] 분석 결과가 HDFS 경로 '{HDFS_OUTPUT_PATH}'에 성공적으로 저장되었습니다.")
 
     except Exception as e:
-        print(f"[Finnhub] 데이터 분석 및 저장 중 오류 발생: {e}")
+        logging.error(f"[Finnhub] 데이터 분석 및 저장 중 오류 발생: {e}", exc_info=True)
         if "Path does not exist" in str(e):
-            print("[Finnhub] 경고: HDFS 입력 경로에 데이터가 없습니다.")
+            logging.warning("[Finnhub] 경고: HDFS 입력 경로에 데이터가 없습니다.")
         sys.exit(1)
 
 
