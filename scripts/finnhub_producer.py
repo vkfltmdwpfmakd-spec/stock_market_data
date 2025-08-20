@@ -75,21 +75,19 @@ if __name__ == "__main__":
     if not producer:
         exit(1)
 
-    run_minutes = 1
-    total_cycles = int(run_minutes * 60 / REQUEST_INTERVAL_SECONDS)
-    logging.info(f"--- Finnhub 데이터 수집 시작 ({run_minutes}분간, 총 {total_cycles} 사이클) ---")
-
-    for i in range(total_cycles):
-        logging.info(f"--- 사이클: {i + 1}/{total_cycles} ---")
+    logging.info(f"--- Finnhub 데이터 수집 시작 (무한 루프) ---")
+    while True:
+        logging.info(f"--- 새로운 수집 사이클 시작 ---")
         for symbol in STOCK_SYMBOLS:
             stock_data = get_stock_data_from_finnhub(symbol)
             send_to_kafka(producer, KAFKA_TOPIC, stock_data)
-            time.sleep(1)
-        
+            time.sleep(1) # 각 심볼 요청 사이에 1초 지연
+
+        # 다음 사이클까지 대기
         remaining_wait_time = REQUEST_INTERVAL_SECONDS - len(STOCK_SYMBOLS)
         if remaining_wait_time > 0:
-            logging.info(f"--- 사이클 {i + 1} 완료, 다음 사이클까지 {remaining_wait_time}초 대기... ---")
+            logging.info(f"--- 사이클 완료, 다음 사이클까지 {remaining_wait_time}초 대기... ---")
             time.sleep(remaining_wait_time)
-
-    logging.info("--- Finnhub 데이터 수집 완료 ---")
-    producer.close()
+    
+    # 무한 루프이므로 아래 코드는 실행되지 않지만, 안전한 종료를 위해 남겨둘 수 있습니다.
+    # producer.close()

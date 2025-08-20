@@ -1,5 +1,3 @@
-
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -29,6 +27,20 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
     networks:
       - data_pipeline_network
+
+  finnhub-producer:
+    build: .
+    container_name: finnhub-producer
+    restart: always
+    depends_on:
+      - kafka
+    env_file:
+      - .env
+    volumes:
+      - ./scripts:/opt/airflow/scripts
+    networks:
+      - data_pipeline_network
+    command: python -u /opt/airflow/scripts/finnhub_producer.py
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
@@ -161,16 +173,20 @@ services:
       - data_pipeline_network
 
   dashboard:
-    build: .
+    image: python:3.9-slim
     container_name: stock_dashboard
     networks:
       - data_pipeline_network
     restart: always
     volumes:
-      - ./dashboard.py:/opt/airflow/dashboard.py
+      - ./dashboard.py:/app/dashboard.py
+      - ./requirements-dashboard.txt:/app/requirements.txt
     ports:
       - "8503:8501"
-    command: streamlit run /opt/airflow/dashboard.py --server.port 8501 --server.address 0.0.0.0
+    working_dir: /app
+    command: bash -c "pip install -r requirements.txt && streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0"
+    depends_on:
+      - namenode
 
 volumes:
   hadoop_namenode:

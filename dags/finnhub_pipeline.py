@@ -17,20 +17,13 @@ with DAG(
     dag_id='finnhub_stock_pipeline',
     default_args=default_args,
     description='Finnhub API를 이용한 주식 데이터 수집, 저장, 분석 파이프라인',
-    schedule_interval=None, # 수동 실행을 위해 None으로 설정
+    schedule_interval='@hourly', # 1시간마다 실행
     start_date=datetime(2023, 1, 1),
     catchup=False,
     tags=['stock', 'finnhub', 'data_pipeline'],
 ) as dag:
 
-    # 1. Finnhub Producer 실행
-    finnhub_producer_task = BashOperator(
-        task_id='run_finnhub_producer',
-        bash_command='python -u /opt/airflow/scripts/finnhub_producer.py',
-        dag=dag,
-    )
-
-    # 2. Finnhub 데이터를 HDFS로 저장 (배치 컨슈머 실행)
+    # 1. Finnhub 데이터를 HDFS로 저장 (배치 컨슈머 실행)
     finnhub_consumer_task = BashOperator(
         task_id='run_finnhub_batch_consumer',
         bash_command=f"""
@@ -42,7 +35,7 @@ with DAG(
         dag=dag,
     )
 
-    # 3. HDFS에 저장된 Finnhub 데이터 분석
+    # 2. HDFS에 저장된 Finnhub 데이터 분석
     finnhub_analyzer_task = BashOperator(
         task_id='run_finnhub_batch_analyzer',
         bash_command=f"""
@@ -54,4 +47,4 @@ with DAG(
     )
 
     # --- 태스크 의존성 설정 ---
-    finnhub_producer_task >> finnhub_consumer_task >> finnhub_analyzer_task
+    finnhub_consumer_task >> finnhub_analyzer_task
