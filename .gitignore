@@ -1,0 +1,11 @@
+# IDE and cache files
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Documentation files to exclude
+readme2.md
+CODE_EXPLANATION.md
+PROJECT_SUMMARY.md
