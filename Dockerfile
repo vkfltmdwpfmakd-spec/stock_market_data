@@ -16,3 +16,6 @@ USER airflow
 # 파이썬 의존성을 설치합니다.
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
+
+# 최종 실행 사용자를 airflow로 명시하여 보안을 강화합니다.
+USER airflow

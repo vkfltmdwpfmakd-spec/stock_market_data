@@ -2,12 +2,11 @@
 
 import sys
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, avg, sum, to_date
+from pyspark.sql import SparkSession, Window
+from pyspark.sql.functions import col, avg, to_date
 
 APP_NAME = "FinnhubBatchAnalyzer"
-# 입력 경로를 finnhub_consumer가 저장한 경로로 변경
 HDFS_INPUT_PATH = "hdfs://namenode:8020/user/spark/finnhub_market_data"
-# 출력 경로도 새로운 경로로 변경
 HDFS_OUTPUT_PATH = "hdfs://namenode:8020/user/spark/analyzed_finnhub_data"
 
 def create_spark_session():
@@ -26,16 +25,31 @@ def analyze_stock_data(spark):
         df = spark.read.parquet(HDFS_INPUT_PATH)
         print(f"[Finnhub] 총 {df.count()}개의 레코드를 읽었습니다.")
 
-        # timestamp 컬럼을 날짜 형식으로 변환하여 그룹화
-        analyzed_df = df.withColumn("trade_date", to_date(col("timestamp"))) \
-                        .groupBy("symbol", "trade_date") \
-                        .agg(
-                            avg("price").alias("average_price"),
-                            avg("previous_close").alias("average_previous_close")
-                        ) \
-                        .orderBy(col("trade_date").desc(), col("symbol"))
+        # 데이터가 비어있으면 분석 중단
+        if df.rdd.isEmpty():
+            print("[Finnhub] 경고: 입력 데이터가 비어있어 분석을 건너뜁니다.")
+            return
 
-        print("[Finnhub] 분석 결과:")
+        # 1. 데이터를 날짜별로 집계하여 일별 평균 가격 계산
+        daily_avg_df = df.withColumn("trade_date", to_date(col("timestamp")))
+                         .groupBy("symbol", "trade_date")
+                         .agg(
+                             avg("price").alias("average_price")
+                         )
+
+        # 2. 7일 이동평균 계산 (Window Function)
+        # - 주식 종목(symbol)별로 파티션을 나눕니다.
+        # - 각 파티션 내에서 날짜(trade_date)순으로 정렬합니다.
+        # - 현재 행(오늘)을 기준으로 이전 6개 행(6일 전)과 현재 행을 포함하여 7일간의 창(window)을 만듭니다.
+        windowSpec = Window.partitionBy("symbol") \
+                           .orderBy("trade_date") \
+                           .rowsBetween(-6, 0)
+
+        # 3. 위에서 정의한 '창'을 기준으로 평균 가격(average_price)의 평균을 계산하여 이동평균을 구합니다.
+        analyzed_df = daily_avg_df.withColumn("moving_avg_7_days", avg("average_price").over(windowSpec))
+                                  .orderBy(col("trade_date").desc(), col("symbol"))
+
+        print("[Finnhub] 분석 결과 (7일 이동평균 포함):")
         analyzed_df.show(truncate=False)
 
         analyzed_df.write \
@@ -50,6 +64,7 @@ def analyze_stock_data(spark):
         if "Path does not exist" in str(e):
             print("[Finnhub] 경고: HDFS 입력 경로에 데이터가 없습니다.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     spark = create_spark_session()
