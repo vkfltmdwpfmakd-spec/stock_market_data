@@ -30,6 +30,8 @@ json_schema = StructType([
 def create_spark_session():
     spark = SparkSession.builder \
         .appName(APP_NAME) \
+        .config("spark.sql.parquet.writeLegacyFormat", "true") \
+        .config("spark.hadoop.dfs.client.use.datanode.hostname", "true") \
         .getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     logging.info("SparkSession이 성공적으로 생성되었습니다.")

@@ -36,6 +36,7 @@ services:
     restart: always
     environment:
       - CLUSTER_NAME=test
+      - HDFS_CONF_dfs_permissions=false
     volumes:
       - hadoop_namenode:/hadoop/dfs/name
     ports:
@@ -44,12 +45,28 @@ services:
     networks:
       - data_pipeline_network
 
+  hdfs-setup:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-setup
+    depends_on:
+      - namenode
+      - datanode
+    volumes:
+      - ./scripts:/opt/scripts
+    networks:
+      - data_pipeline_network
+    command: bash /opt/scripts/hdfs_init.sh
+    restart: "no"
+
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode
     restart: always
     depends_on:
       - namenode
+    environment:
+      SERVICE_PRECONDITION: "namenode:8020"
+      CORE_CONF_fs_defaultFS: "hdfs://namenode:8020"
     volumes:
       - hadoop_datanode:/hadoop/dfs/data
     networks:
@@ -103,6 +120,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      hdfs-setup:
+        condition: service_completed_successfully
     env_file:
       - .env
     volumes:
@@ -126,13 +145,17 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      hdfs-setup:
+        condition: service_completed_successfully
     env_file:
       - .env
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
       - airflow_data:/opt/airflow
+      - /var/run/docker.sock:/var/run/docker.sock
     command: airflow scheduler
     networks:
       - data_pipeline_network

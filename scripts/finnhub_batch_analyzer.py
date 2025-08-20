@@ -13,6 +13,8 @@ def create_spark_session():
     spark = SparkSession.builder \
         .appName(APP_NAME) \
         .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
+        .config("spark.sql.parquet.writeLegacyFormat", "true") \
+        .config("spark.hadoop.dfs.client.use.datanode.hostname", "true") \
         .getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     print("[Finnhub] SparkSession이 성공적으로 생성되었습니다.")
@@ -31,11 +33,13 @@ def analyze_stock_data(spark):
             return
 
         # 1. 데이터를 날짜별로 집계하여 일별 평균 가격 계산
-        daily_avg_df = df.withColumn("trade_date", to_date(col("timestamp")))
-                         .groupBy("symbol", "trade_date")
-                         .agg(
-                             avg("price").alias("average_price")
-                         )
+        daily_avg_df = (
+            df.withColumn("trade_date", to_date(col("timestamp")))
+            .groupBy("symbol", "trade_date")
+            .agg(
+                avg("price").alias("average_price")
+            )
+        )
 
         # 2. 7일 이동평균 계산 (Window Function)
         # - 주식 종목(symbol)별로 파티션을 나눕니다.
@@ -46,8 +50,10 @@ def analyze_stock_data(spark):
                            .rowsBetween(-6, 0)
 
         # 3. 위에서 정의한 '창'을 기준으로 평균 가격(average_price)의 평균을 계산하여 이동평균을 구합니다.
-        analyzed_df = daily_avg_df.withColumn("moving_avg_7_days", avg("average_price").over(windowSpec))
-                                  .orderBy(col("trade_date").desc(), col("symbol"))
+        analyzed_df = (
+            daily_avg_df.withColumn("moving_avg_7_days", avg("average_price").over(windowSpec))
+                        .orderBy(col("trade_date").desc(), col("symbol"))
+        )
 
         print("[Finnhub] 분석 결과 (7일 이동평균 포함):")
         analyzed_df.show(truncate=False)
@@ -64,6 +70,7 @@ def analyze_stock_data(spark):
         if "Path does not exist" in str(e):
             print("[Finnhub] 경고: HDFS 입력 경로에 데이터가 없습니다.")
         sys.exit(1)
+
 
 
 if __name__ == "__main__":

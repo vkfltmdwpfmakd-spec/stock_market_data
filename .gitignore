@@ -5,6 +5,9 @@ __pycache__/
 # Environment variables
 .env
 
+# Log files
+logs/
+
 # Documentation files to exclude
 readme2.md
 CODE_EXPLANATION.md
