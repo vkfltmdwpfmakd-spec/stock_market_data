@@ -89,7 +89,8 @@ def get_enhanced_stock_data(symbol):
             'previous_close': float(quote_data.get('pc', 0)),
             'price_change': float(quote_data.get('d', 0)),
             'percent_change': float(quote_data.get('dp', 0)),
-            'timestamp': datetime.fromtimestamp(quote_data.get('t', 0)).isoformat()
+            'timestamp': datetime.now().isoformat(),  # 현재 수집 시간 사용 (실시간 데이터 수집용)
+            'market_timestamp': datetime.fromtimestamp(quote_data.get('t', 0)).isoformat()  # 원본 시장 시간 보존
         }
         
         # 2. 회사 기본 정보 (캐시된 정보, 매시간 업데이트)
@@ -100,10 +101,19 @@ def get_enhanced_stock_data(symbol):
                 profile_response = requests.get(profile_url, timeout=10)
                 if profile_response.status_code == 200:
                     profile_data = profile_response.json()
+                    # Null 값 안전 처리
+                    def safe_float(value, default=0.0):
+                        if value is None or value == 0 or str(value).lower() in ['null', 'none', '']:
+                            return default
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+
                     enhanced_data.update({
                         'company_name': profile_data.get('name', ''),
                         'industry': profile_data.get('finnhubIndustry', ''),
-                        'market_cap': float(profile_data.get('marketCapitalization', 0)),
+                        'market_cap': safe_float(profile_data.get('marketCapitalization')),
                         'country': profile_data.get('country', ''),
                         'currency': profile_data.get('currency', 'USD'),
                         'exchange': profile_data.get('exchange', ''),
@@ -113,8 +123,8 @@ def get_enhanced_stock_data(symbol):
             except Exception as e:
                 logging.warning(f"Profile 데이터 수집 실패 for {symbol}: {e}")
         
-        # 3. 기본 재무 지표 (3시간마다)
-        if current_hour % 3 == 0:
+        # 3. 기본 재무 지표 (매시간)
+        if current_hour % 1 == 0:
             try:
                 metrics_url = f"https://finnhub.io/api/v1/stock/metric?symbol={symbol}&metric=all&token={FINNHUB_API_KEY}"
                 metrics_response = requests.get(metrics_url, timeout=10)
@@ -122,15 +132,24 @@ def get_enhanced_stock_data(symbol):
                     metrics_data = metrics_response.json()
                     if 'metric' in metrics_data:
                         metric = metrics_data['metric']
+                        # Null 값 안전 처리
+                        def safe_float(value, default=0.0):
+                            if value is None or value == 0 or str(value).lower() in ['null', 'none', '']:
+                                return default
+                            try:
+                                return float(value)
+                            except (ValueError, TypeError):
+                                return default
+
                         enhanced_data.update({
-                            'pe_ratio': float(metric.get('peBasicExclExtraTTM', 0)),
-                            'pb_ratio': float(metric.get('pbAnnual', 0)),
-                            'eps_ttm': float(metric.get('epsBasicExclExtraAnnual', 0)),
-                            'dividend_yield': float(metric.get('dividendYieldIndicatedAnnual', 0)),
-                            'beta': float(metric.get('beta', 0)),
-                            'week_52_high': float(metric.get('52WeekHigh', 0)),
-                            'week_52_low': float(metric.get('52WeekLow', 0)),
-                            'volume_10day_avg': float(metric.get('10DayAverageTradingVolume', 0)),
+                            'pe_ratio': safe_float(metric.get('peBasicExclExtraTTM')),
+                            'pb_ratio': safe_float(metric.get('pbAnnual')),
+                            'eps_ttm': safe_float(metric.get('epsBasicExclExtraAnnual')),
+                            'dividend_yield': safe_float(metric.get('dividendYieldIndicatedAnnual')),
+                            'beta': safe_float(metric.get('beta')),
+                            'week_52_high': safe_float(metric.get('52WeekHigh')),
+                            'week_52_low': safe_float(metric.get('52WeekLow')),
+                            'volume_10day_avg': safe_float(metric.get('10DayAverageTradingVolume')),
                         })
                     time.sleep(0.2)  # API 레이트 제한 준수
             except Exception as e:

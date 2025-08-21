@@ -17,10 +17,10 @@ with DAG(
     dag_id='finnhub_stock_pipeline',
     default_args=default_args,
     description='Finnhub API를 이용한 주식 데이터 수집, 저장, 분석 파이프라인',
-    schedule_interval='@hourly', # 1시간마다 실행
+    schedule_interval=timedelta(minutes=15), # 15분마다 실행 (이력 데이터 누적)
     start_date=datetime(2023, 1, 1),
     catchup=False,
-    tags=['stock', 'finnhub', 'data_pipeline'],
+    tags=['stock', 'finnhub', 'data_pipeline', 'append_mode'],
 ) as dag:
 
     # 1. Finnhub 데이터를 HDFS로 저장 (배치 컨슈머 실행)

@@ -3,7 +3,7 @@
 import sys
 import logging
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, current_timestamp, date_format, hour, to_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 
 # 로깅 설정
@@ -85,13 +85,21 @@ def process_kafka_batch(spark):
             .select(from_json(col("json_data"), json_schema).alias("data")) \
             .select("data.*")
 
-        logging.info(f"데이터를 HDFS 경로 '{HDFS_PATH}'에 저장합니다. (mode: overwrite)")
+        # 배치 처리 시간 정보 추가 (중복 제거용)
+        enriched_df = parsed_df \
+            .withColumn("batch_timestamp", current_timestamp()) \
+            .withColumn("batch_date", date_format(current_timestamp(), "yyyy-MM-dd")) \
+            .withColumn("batch_hour", hour(current_timestamp())) \
+            .withColumn("processed_timestamp", to_timestamp(col("timestamp")))
 
-        # 멱등성 보장을 위해 매번 데이터를 덮어쓰기(overwrite)합니다.
-        # 이는 파이프라인을 여러 번 재실행해도 결과가 항상 동일하게 유지되도록 합니다.
-        parsed_df.write \
-            .mode("overwrite") \
-            .partitionBy("symbol") \
+        logging.info(f"데이터를 HDFS 경로 '{HDFS_PATH}'에 저장합니다. (mode: append)")
+
+        # 이력 데이터 보존을 위해 append 모드로 변경
+        # 시간 기반 파티셔닝으로 효율적인 쿼리 지원
+        enriched_df.write \
+            .mode("append") \
+            .partitionBy("batch_date", "batch_hour", "symbol") \
+            .option("maxRecordsPerFile", 10000) \
             .parquet(HDFS_PATH)
 
         logging.info("데이터 저장을 완료하고 작업을 종료합니다.")
