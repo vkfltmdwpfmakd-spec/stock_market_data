@@ -3,7 +3,7 @@
 import sys
 import logging
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, avg, to_date
+from pyspark.sql.functions import col, avg, to_date, count
 from pyspark.sql.window import Window
 
 # 로깅 설정
@@ -34,7 +34,10 @@ def analyze_finnhub_data(spark):
 
         daily_avg_price_df = df.withColumn("trade_date", to_date(col("timestamp")))
                                .groupBy("symbol", "trade_date")
-                               .agg(avg("price").alias("daily_avg_price"))
+                               .agg(
+                                   avg("price").alias("daily_avg_price"),
+                                   count("price").alias("data_count_for_avg")
+                               )
                                .orderBy("symbol", "trade_date")
         logging.info("일별 평균 가격 계산 완료.")
 

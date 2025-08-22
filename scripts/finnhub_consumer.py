@@ -1,4 +1,5 @@
-# finnhub_consumer.py (로깅 및 멱등성 적용)
+# Kafka Consumer - 카프카에서 데이터 읽어서 HDFS에 저장
+# 배치 모드로 동작 - Airflow가 15분마다 실행해서 쌓인 데이터 한번에 처리
 
 import sys
 import logging
@@ -9,11 +10,11 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
-# --- 설정 ---
+# 기본 설정들
 APP_NAME = "FinnhubBatchConsumer"
-KAFKA_BROKER = "kafka:9092"
-KAFKA_TOPIC = "finnhub_stock_data"
-HDFS_PATH = "hdfs://namenode:8020/user/spark/finnhub_market_data"
+KAFKA_BROKER = "kafka:9092"  # 카프카 브로커 주소
+KAFKA_TOPIC = "finnhub_stock_data"  # 읽어올 토픽명
+HDFS_PATH = "hdfs://namenode:8020/user/spark/finnhub_market_data"  # 저장할 HDFS 경로
 
 json_schema = StructType([
     # 기본 필드들

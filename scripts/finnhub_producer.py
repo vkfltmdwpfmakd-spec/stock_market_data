@@ -1,4 +1,6 @@
-# finnhub_producer.py (로깅 적용)
+# Finnhub API 데이터 수집기 (Producer)
+# 30초마다 주식 데이터 수집해서 Kafka로 전송
+# 기본 가격 정보 + 회사 정보 + 재무지표까지 한번에 가져옴
 
 import os
 import requests
@@ -8,28 +10,29 @@ import logging
 from kafka import KafkaProducer
 from datetime import datetime
 
-# 로깅 설정
+# 로그 포맷 설정 - 시간이랑 레벨 표시해서 디버깅 편하게
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
-# --- 설정 ---
-KAFKA_BROKER = 'kafka:9092'
-KAFKA_TOPIC = 'finnhub_stock_data'
-FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
-# 동적 종목 선택 설정
+# 기본 설정들
+KAFKA_BROKER = 'kafka:9092'  # 카프카 브로커 주소
+KAFKA_TOPIC = 'finnhub_stock_data'  # 보낼 토픽명
+FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')  # API 키는 환경변수에서 가져옴
+
+# 종목 선택 방식 - 환경변수로 설정 가능
 STOCK_SYMBOLS_CONFIG = os.getenv('STOCK_SYMBOLS', 'TSLA,NVDA,AMD,QCOM,INTC,AAPL,GOOGL,MSFT')
-STOCK_SELECTION_METHOD = os.getenv('STOCK_SELECTION_METHOD', 'manual')  # manual, trending, sp500
-REQUEST_INTERVAL_SECONDS = 30
+STOCK_SELECTION_METHOD = os.getenv('STOCK_SELECTION_METHOD', 'manual')  # manual/trending/sp500 중 선택
+REQUEST_INTERVAL_SECONDS = 30  # 30초마다 데이터 수집
 
 def get_trending_stocks():
-    """Finnhub에서 트렌딩 종목 가져오기"""
+    """트렌딩 종목 가져오기 - 실제론 recommendation API 써야 하는데 일단 하드코딩"""
     try:
         url = f"https://finnhub.io/api/v1/stock/recommendation-trends?symbol=AAPL&token={FINNHUB_API_KEY}"
-        # 실제로는 여러 종목을 확인하고 recommendation score가 높은 것들 선택
-        # 간단한 예시로 tech stocks 반환
+        # TODO: 실제로는 여러 종목 recommendation score 확인해서 상위 종목들 선택해야 함
+        # 지금은 그냥 유명한 테크주들로 대체
         return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX']
     except Exception as e:
         logging.error(f"트렌딩 종목 조회 오류: {e}")
-        return ['AAPL', 'MSFT', 'GOOGL', 'AMZN']  # 기본값
+        return ['AAPL', 'MSFT', 'GOOGL', 'AMZN']  # API 오류시 기본값으로 대체
 
 def get_sp500_top_stocks():
     """S&P 500 상위 종목들"""
